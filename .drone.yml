@@ -1,0 +1,74 @@
+kind: pipeline
+type: docker
+name: Wildcard_Domain_ACME_Automation
+
+environment:
+  DOMAIN: example.com
+  ACME_SERVER: https://acme-v02.api.letsencrypt.org/directory
+  ACME_ACCOUNT_MAIL: someone@example.com
+  BITBUCKET_USERNAME: someone
+  BITBUCKET_REPO_NAME: someone@some-repo
+  TIMEZONE: Asia/Shanghai
+
+workspace:
+  path: /workspace
+
+steps:
+- name: import_keys_from_secret
+  image: alpine
+  environment:
+    ACME_ACCOUNT_KEY:
+      from_secret: ACME_ACCOUNT_KEY
+    DOMAIN_RSA_KEY:
+      from_secret: DOMAIN_RSA_KEY
+    DOMAIN_EC_KEY:
+      from_secret: DOMAIN_EC_KEY
+  commands:
+  - mkdir -p accounts/$(printf "$ACME_SERVER" | cut -d/ -f3)/$ACME_ACCOUNT_MAIL/keys
+  - printf "$ACME_ACCOUNT_KEY" > accounts/$(printf "$ACME_SERVER" | cut -d/ -f3)/$ACME_ACCOUNT_MAIL/keys/$ACME_ACCOUNT_MAIL.key
+  - printf "$DOMAIN_RSA_KEY" > RSA.key
+  - printf "$DOMAIN_EC_KEY" > EC.key
+- name: generate_signing_requests
+  image: alpine
+  commands:
+  - apk add --no-cache openssl
+  - cp /etc/ssl/openssl.cnf openssl.cnf
+  - printf "\n[SAN]\nsubjectAltName=DNS:$DOMAIN,DNS:*.$DOMAIN" >> openssl.cnf
+  - openssl req -new -sha256 -key RSA.key -subj "/" -reqexts SAN -config openssl.cnf > RSA.csr
+  - openssl req -new -sha256 -key EC.key -subj "/" -reqexts SAN -config openssl.cnf > EC.csr
+  - rm RSA.key EC.key openssl.cnf
+- name: signing_rsa_key
+  image: goacme/lego
+  environment:
+    DESEC_TOKEN:
+      from_secret: DESEC_TOKEN
+    DESEC_TTL: 3600
+  commands:
+  - lego --path /workspace --server $ACME_SERVER --csr /workspace/RSA.csr --dns desec --email "$ACME_ACCOUNT_MAIL" --accept-tos run
+- name: gathering_rsa_singing_results
+  image: alpine
+  commands:
+  - cp certificates/$DOMAIN.crt rsa.cert.pem
+  - cp certificates/$DOMAIN.json rsa.json
+  - rm -rf certificates
+- name: signing_ec_key
+  image: goacme/lego
+  environment:
+    DESEC_TOKEN:
+      from_secret: DESEC_TOKEN
+    DESEC_TTL: 3600
+  commands:
+  - lego --path /workspace --server $ACME_SERVER --csr /workspace/EC.csr --dns desec --email "$ACME_ACCOUNT_MAIL" --accept-tos run
+- name: gathering_ec_singing_results
+  image: alpine
+  commands:
+  - cp certificates/$DOMAIN.crt ec.cert.pem
+  - cp certificates/$DOMAIN.json ec.json
+  - rm -rf certificates
+- name: publish_certificates
+  image: node
+  environment:
+    BITBUCKET_PASSWORD:
+      from_secret: BITBUCKET_PASSWORD
+  commands:
+  - ./publish
