@@ -1,20 +1,12 @@
 # Wildcard Domain ACME Automation
 
-Apply for *Let's Encrypt*'s wildcard certificates for second-level-domains with Drone CI, in both RSA and EC (Elliptic Curve) algorithms, and publish the public key for future uses. 
+Apply for *Let's Encrypt*'s wildcard certificates for second-level-domains with Drone CI, in both RSA and EC (Elliptic Curve) algorithms.
 
 The idea is to apply for wildcard certificates and use them elsewhere, deploying them in other automation procedures, instead of applying for one keypair per server. This might also help to reduce exposures of what you've deployed on searching services like [crt.sh](https://crt.sh/).
 
-Related infrastructures and services:
-- **Drone CI** and Drone's Docker Runner for running signing procedures.
-- **BitBucket**. It doesn't matter from where Drone CI clones the repository, but the script assumes that we're using BitBucket and publish obtained certificates to Bitbucket's *Download* panel with their API.
-- **deSEC** for hosting the domain's DNS and providing API accesses for adding TXT records to respond to LE's ACME challenges.
-- **Let's Encrypt** for providing certificates. In theory, it would work with other certificate providers with ACME protocol.
-
 ## Disclaimer
 
-This automation is **HARD-CODED** with APIs of these infrastructures above, so it should be more like a demonstration instead of a template that you can fill in your own values and deploy right away. 
-
-If you'd like to host your repository with other hosting services like GitHub, GitLab, run a similar procedure with public building services like GitHub Actions, Travis CI, or your domain is hosted with providers other than deSEC, you might have to modify the code slightly or make another one.  
+The `.drone.yml` that comes with this repository is not something you can commit and push and deploy right away. The DNS provider I use as an example is ClouDNS, you might want to refer to LEGO's manual, to figure out which variable to fill in when using a different DNS provider (as long as it's supported by LEGO).
 
 Also, no exception handling in this automation. Running CI tasks with empty or wrong variables provided will results in build failures, or hitting the rate limit of Let's Encrypt.
 
@@ -26,29 +18,21 @@ This automation obtains certificates in RSA and EC algorithms that cover the fol
 
 That would satisfy the needs of deploying personal websites, as well as self-hosted services. 
 
-After signing, this automation will append `yourdomain_YYYYMM_rsa.pem`, `yourdomain_YYYYMM_ec.pem` to the *Downloads* panel of the given BitBucket repository, and override `latest.json` in the *Downloads* that tells where you can download these certificates, from both `letsencrypt.org` and the repository itself. This might be useful when deploying other services with the obtained certificate, in an automated fashion.
-  
-This automation uses LEGO to respond to LE's ACME challenge and obtaining certificates.
+This automation uses LEGO to respond to LE's ACME challenge and obtaining certificates. If the signing is successful, `rsa.cert.pem` and `ec.cert.pem`, which returned by LE's server, will be left within the workspace. You can append your own steps, commit or publish them somewhere else, and fetch them in other automation procedures.
 
-## Variables to provide when using this automation
+## Instructions
 
-The following variables should be filled into `.drone.yml` before committing and triggering CI tasks:
-
-| Variable              | Description                                                                                                                                                       |  
-| :-------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ACME_ACCOUNT_MAIL`   | E-mail address to use as an account when using LE's services.                                                                                                     |
-| `ACME_SERVER`         | LE's server URL. <br /> `https://acme-v02.api.letsencrypt.org/directory` for production and `https://acme-staging-v02.api.letsencrypt.org/directory` for testing. |
-| `BITBUCKET_REPO_NAME` | Bitbucket repository to push to. <br />Ex. `someone/some-repo`                                                                                                    |
-| `BITBUCKET_USERNAME`  | Bitbucket username. <br />Ex. `someone`                                                                                                                           |
-| `DOMAIN`              | Domain to obtain certificates with.                                                                                                                               |
-| `TIMEZONE`            | Timezone to reference when filling in the obtaining date of certificates. <br />Ex. `Asia/Shanghai`                                                               |
-
-The following variables should be provided as *Secret*s before triggering CI tasks: *(Note that it's okay to provide multi-line PEM private keys with Drone CI's Secret feature)*
-
-| Variable             | Description                                                                                                                                      |  
-| :------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- |  
-| `ACME_ACCOUNT_KEY`   | The private key to authenticate LE's services. In RSA private key format. <br />Can be generated with: <br />`openssl genrsa 4096 > account.key` |    
-| `BITBUCKET_PASSWORD` | Password to authenticate bitbucket account when pushing release downloads.                                                                       |    
-| `DESEC_TOKEN`        | Token of deSEC DNS API.                                                                                                                          |   
-| `DOMAIN_EC_KEY`      | Pre-generated EC private key. <br />Can be generated with: <br />`openssl genrsa 4096 > domain_rsa.key`                                          |  
-| `DOMAIN_RSA_KEY`     | Pre-generated RSA private key. <br />Can be generated with: <br />`openssl ecparam -name prime256v1 -genkey -noout -out domain_ec.key`           |   
+1. Fill in the name of domain you own, in the `DOMAIN` variable at the beginning of `.drone.yml`.
+2. Fill in the E-mail address you want to use as an account, in the `ACME_ACCOUNT_MAIL` variable.
+3. If you're testing the automation, it's usually good idea to temporarily change the `ACME_SERVER` variable from `https://acme-v02.api.letsencrypt.org/directory` to `https://acme-staging-v02.api.letsencrypt.org/directory`.
+4. Create a repository to hold this automation, trigger a sync in Drone CI if needed, and activate the repository in Drone CI.
+5. Create a secret named `ACME_ACCOUNT_KEY` under the repository's secret panel, and fill in the private key of your Let's Encrypt account. *(Note that it's okay to provide multi-line PEM private keys with Drone CI's Secret feature)* \
+   To generate an account private key, use `openssl genrsa 4096 > account.key`.
+6. Create a secret named `DOMAIN_RSA_KEY`, and fill in the RSA private key which you want to apply certificates with. \
+   To generate an RSA key for your domain, use `openssl genrsa 4096 > domain_rsa.key`.
+7. Create a secret named `DOMAIN_EC_KEY`, and fill in the EC private key which you want to apply certificates with. \
+   To generate an EC key for your domain, use `openssl ecparam -name prime256v1 -genkey -noout -out domain_ec.key`.
+8. Go to LEGO project's [manual](https://go-acme.github.io/lego/dns/), find the DNS provider you use, find out the variable you need to provide to the LEGO, and provide them with secrets in both `signing_rsa_key` and `signing_ec_key` step in `.drone.yml`. \
+   For example, LEGO wants `CLOUDNS_AUTH_ID` and `CLOUDNS_AUTH_PASSWORD` when using ClouDNS.
+9. Append your own steps to push/publish/commit these resulting certificates, which named `rsa.cert.pem` and `ec.cert.pem` under the workspace. \
+   **Attention! They will go to nowhere if you don't do anything.**
