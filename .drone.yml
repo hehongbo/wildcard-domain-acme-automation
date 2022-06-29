@@ -29,7 +29,7 @@ steps:
   image: alpine
   commands:
   - apk add --no-cache openssl
-  - cp /etc/ssl1.1/openssl.cnf openssl.cnf
+  - cp /etc/ssl/openssl.cnf openssl.cnf
   - printf "\n[SAN]\nsubjectAltName=DNS:$DOMAIN,DNS:*.$DOMAIN" >> openssl.cnf
   - openssl req -new -sha256 -key RSA.key -subj "/" -reqexts SAN -config openssl.cnf > RSA.csr
   - openssl req -new -sha256 -key EC.key -subj "/" -reqexts SAN -config openssl.cnf > EC.csr
