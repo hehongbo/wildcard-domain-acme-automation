@@ -43,7 +43,7 @@ steps:
     CLOUDNS_AUTH_PASSWORD:
       from_secret: CLOUDNS_AUTH_PASSWORD
   commands:
-  - lego --path /workspace --server $ACME_SERVER --csr /workspace/RSA.csr --dns $DNS_PROVIDER --email "$ACME_ACCOUNT_MAIL" --accept-tos run
+  - /lego --path /workspace --server $ACME_SERVER --csr /workspace/RSA.csr --dns $DNS_PROVIDER --email "$ACME_ACCOUNT_MAIL" --accept-tos run
 - name: gathering_rsa_singing_results
   image: alpine
   commands:
@@ -58,7 +58,7 @@ steps:
     CLOUDNS_AUTH_PASSWORD:
       from_secret: CLOUDNS_AUTH_PASSWORD
   commands:
-  - lego --path /workspace --server $ACME_SERVER --csr /workspace/EC.csr --dns $DNS_PROVIDER --email "$ACME_ACCOUNT_MAIL" --accept-tos run
+  - /lego --path /workspace --server $ACME_SERVER --csr /workspace/EC.csr --dns $DNS_PROVIDER --email "$ACME_ACCOUNT_MAIL" --accept-tos run
 - name: gathering_ec_singing_results
   image: alpine
   commands:
